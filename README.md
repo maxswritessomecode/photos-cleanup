@@ -6,6 +6,18 @@ This engine runs as the high-speed processing core behind the [AetherPhotos Desk
 
 ---
 
+## 🗑️➡️🎒 Stop Kicking the Can Down the Road
+
+If you are like most of us, your digital memories are scattered in a dozen different messy places. You have a couple of old macOS Photos libraries on external drives, random backups uploaded to Amazon Photos, and a massive dump of fragmented, split-ZIP files from Google Takeout that you've been meaning to sort through.
+
+You've probably been **kicking this can down the road for years** because doing it manually is an absolute nightmare. It’s too messy, too time-consuming, and standard cloud tools make it incredibly difficult to decouple from their subscription lock-ins so you can just own and save your pictures the way you want to.
+
+**AetherPhotos was built to solve exactly this.** It is a non-destructive, blazing-fast local centralization engine designed to take the friction out of sorting your digital life. It indexes everything, finds duplicate clutter, restores microsecond-level metadata timezone shifts, and copies a clean, chronological master folder tree to your external drive or local disk. 
+
+No cloud fees. No corporate lock-in. Just your memories, organized perfectly and kept 100% private.
+
+---
+
 ## 🚀 Core Engine Features
 
 1.  **High-Speed SQLite Indexing (`db.py`):**
