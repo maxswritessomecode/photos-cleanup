@@ -17,6 +17,11 @@ class PhotosRegistry:
         self.conn = sqlite3.connect(self.db_path)
         # Enable returning dictionary-like rows for ease of use
         self.conn.row_factory = sqlite3.Row
+        
+        # Concurrency enhancements for multi-threaded access (WAL mode)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.conn.execute("PRAGMA synchronous=NORMAL;")
+        self.conn.execute("PRAGMA busy_timeout=30000;")
 
     def close(self):
         if self.conn:
@@ -96,7 +101,6 @@ class PhotosRegistry:
             run_id, source_type, source_root, relative_path, filename, file_size,
             sha256, exif_date, takeout_json_date, latitude, longitude, camera_make, camera_model
         ))
-        self.conn.commit()
         return cursor.lastrowid
 
     def get_file(self, file_id):

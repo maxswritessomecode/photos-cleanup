@@ -235,7 +235,7 @@ class GoogleTakeoutScraper:
 
                             yield {
                                 'filename': filename,
-                                'source_root': zip_filename,
+                                'source_root': zip_path, # Yield absolute path to support incremental scanning checks
                                 'relative_path': name,
                                 'file_size': file_size,
                                 'takeout_json_date': takeout_json_date,

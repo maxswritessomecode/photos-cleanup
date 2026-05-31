@@ -69,7 +69,11 @@ class Centralizer:
             if source_type in ('macos_photos', 'amazon_photos'):
                 src_abs_path = os.path.join(record['source_root'], record['relative_path'])
             elif source_type == 'google_takeout':
-                zip_path = os.path.join(self.takeout_zips_dir, record['source_root'])
+                if os.path.isabs(record['source_root']):
+                    zip_path = record['source_root']
+                else:
+                    zip_path = os.path.join(self.takeout_zips_dir, record['source_root'])
+                
                 if os.path.exists(zip_path):
                     src_abs_path = zip_path
                     zip_handle = record['relative_path']

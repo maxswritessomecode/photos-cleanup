@@ -74,6 +74,7 @@ def run_scan_worker(run_id: int, db_path: str, macos_dir: Optional[str], amazon_
             
             if not has_macos:
                 scraper = macOSPhotosScraper(macos_dir)
+                inserted = 0
                 for item in scraper.scan_metadata():
                     if is_cancelled():
                         return
@@ -93,6 +94,10 @@ def run_scan_worker(run_id: int, db_path: str, macos_dir: Optional[str], amazon_
                         camera_make=item['camera_make'],
                         camera_model=item['camera_model']
                     )
+                    inserted += 1
+                    if inserted % 500 == 0:
+                        registry.conn.commit()
+                registry.conn.commit()
             else:
                 if is_cancelled():
                     return
@@ -107,6 +112,7 @@ def run_scan_worker(run_id: int, db_path: str, macos_dir: Optional[str], amazon_
             
             if not has_amazon:
                 scraper = AmazonPhotosScraper(amazon_dir)
+                inserted = 0
                 for item in scraper.scan_files():
                     if is_cancelled():
                         return
@@ -122,6 +128,10 @@ def run_scan_worker(run_id: int, db_path: str, macos_dir: Optional[str], amazon_
                         sha256=sha256,
                         exif_date=item['exif_date']
                     )
+                    inserted += 1
+                    if inserted % 500 == 0:
+                        registry.conn.commit()
+                registry.conn.commit()
             else:
                 if is_cancelled():
                     return
@@ -131,18 +141,23 @@ def run_scan_worker(run_id: int, db_path: str, macos_dir: Optional[str], amazon_
                 
         # 3. Google Takeout Scraper
         if takeout_dir and os.path.exists(takeout_dir):
-            cursor.execute("SELECT count(*) FROM files WHERE source_type = 'google_takeout' AND source_root = ?", (takeout_dir,))
-            has_takeout = cursor.fetchone()[0] > 0
+            # To check if Google Takeout is already scanned, we check if there are any records 
+            # where the parent directory of source_root zip files matches takeout_dir
+            cursor.execute("SELECT DISTINCT source_root FROM files WHERE source_type = 'google_takeout'")
+            rows = cursor.fetchall()
+            old_takeout = os.path.dirname(rows[0][0]) if rows else None
+            has_takeout = (old_takeout == takeout_dir)
             
             if not has_takeout:
                 scraper = GoogleTakeoutScraper(takeout_dir)
+                inserted = 0
                 for item in scraper.scan_zip_files():
                     if is_cancelled():
                         return
                     registry.add_file(
                         run_id=run_id,
                         source_type='google_takeout',
-                        source_root=item['source_root'],
+                        source_root=item['source_root'], # Absolute ZIP file path
                         relative_path=item['relative_path'],
                         filename=item['filename'],
                         file_size=item['file_size'],
@@ -151,19 +166,31 @@ def run_scan_worker(run_id: int, db_path: str, macos_dir: Optional[str], amazon_
                         latitude=item['latitude'],
                         longitude=item['longitude']
                     )
+                    inserted += 1
+                    if inserted % 500 == 0:
+                        registry.conn.commit()
+                registry.conn.commit()
             else:
                 if is_cancelled():
                     return
                 # Instantly reuse existing records
-                cursor.execute("UPDATE files SET run_id = ? WHERE source_type = 'google_takeout' AND source_root = ?", (run_id, takeout_dir))
+                cursor.execute("UPDATE files SET run_id = ? WHERE source_type = 'google_takeout'", (run_id,))
                 registry.conn.commit()
         
         if is_cancelled():
             return
+            
+        # Clean up any leftover orphaned records from previous runs
+        cursor.execute("DELETE FROM files WHERE run_id != ?", (run_id,))
+        registry.conn.commit()
+        
         registry.complete_run(run_id, 'completed')
     except Exception as e:
         print(f"Scan background worker failed: {e}")
-        registry.complete_run(run_id, 'failed')
+        try:
+            registry.complete_run(run_id, 'failed')
+        except Exception:
+            pass
     finally:
         registry.close()
 
@@ -195,8 +222,8 @@ async def scan_sources(request: ScanRequest, background_tasks: BackgroundTasks):
                 
             # 3. Google Takeout
             cursor.execute("SELECT DISTINCT source_root FROM files WHERE source_type = 'google_takeout'")
-            row = cursor.fetchone()
-            old_takeout = row[0] if row else None
+            rows = cursor.fetchall()
+            old_takeout = os.path.dirname(rows[0][0]) if rows else None
             if request.takeout_dir != old_takeout or not request.takeout_dir:
                 cursor.execute("DELETE FROM files WHERE source_type = 'google_takeout'")
                 
@@ -285,19 +312,35 @@ async def get_report():
     registry = PhotosRegistry(REGISTRY_DB_PATH)
     cursor = registry.conn.cursor()
     
-    cursor.execute("SELECT count(*) FROM files")
+    # Restrict report queries to the active/latest pipeline run ID to prevent run crosstalk
+    cursor.execute("SELECT max(run_id) FROM pipeline_runs")
+    row = cursor.fetchone()
+    latest_run_id = row[0] if row else None
+    
+    if latest_run_id is None:
+        registry.close()
+        return {
+            "status": "success",
+            "total_assets": 0,
+            "unique_canonical": 0,
+            "duplicates": 0,
+            "reclaimable_bytes": 0,
+            "breakdown": []
+        }
+    
+    cursor.execute("SELECT count(*) FROM files WHERE run_id = ?", (latest_run_id,))
     total_assets = cursor.fetchone()[0]
     
-    cursor.execute("SELECT count(*) FROM files WHERE is_duplicate = 0")
+    cursor.execute("SELECT count(*) FROM files WHERE run_id = ? AND is_duplicate = 0", (latest_run_id,))
     unique_canonical = cursor.fetchone()[0]
     
-    cursor.execute("SELECT count(*) FROM files WHERE is_duplicate = 1")
+    cursor.execute("SELECT count(*) FROM files WHERE run_id = ? AND is_duplicate = 1", (latest_run_id,))
     duplicates = cursor.fetchone()[0]
     
-    cursor.execute("SELECT sum(file_size) FROM files WHERE is_duplicate = 1")
+    cursor.execute("SELECT sum(file_size) FROM files WHERE run_id = ? AND is_duplicate = 1", (latest_run_id,))
     reclaimable_bytes = cursor.fetchone()[0] or 0
     
-    cursor.execute("SELECT source_type, is_duplicate, count(*), sum(file_size) FROM files GROUP BY source_type, is_duplicate")
+    cursor.execute("SELECT source_type, is_duplicate, count(*), sum(file_size) FROM files WHERE run_id = ? GROUP BY source_type, is_duplicate", (latest_run_id,))
     breakdown_rows = cursor.fetchall()
     
     breakdown = []

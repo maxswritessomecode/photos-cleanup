@@ -163,7 +163,7 @@ class TestGoogleTakeoutScraper(unittest.TestCase):
         
         f = files[0]
         self.assertEqual(f['filename'], 'IMG_5678.JPG')
-        self.assertEqual(f['source_root'], 'takeout-20260526T010422Z-3-001.zip')
+        self.assertEqual(f['source_root'], self.zip_path)
         self.assertEqual(f['relative_path'], self.media_name)
         self.assertEqual(f['takeout_json_date'], '2021-05-30 12:00:00')
         self.assertEqual(f['latitude'], 37.7749)
