@@ -107,5 +107,40 @@ class TestDeduplicator(unittest.TestCase):
         self.assertEqual(f2_record['is_duplicate'], 0)
         self.assertEqual(f2_record['best_candidate_id'], f2)
 
+    def test_amazon_near_duplicates_normalization(self):
+        # File 1: Original from macOS Photos
+        f1 = self.registry.add_file(
+            run_id=self.run_id,
+            source_type='macos_photos',
+            source_root='/Volumes/T9_2T/Photos Library.photoslibrary',
+            relative_path='originals/A/UUID_IMG_2687.jpeg',
+            filename='IMG_2687.JPG',
+            file_size=120000,
+            sha256='hash_mac',
+            exif_date='2018-07-15 05:22:28'
+        )
+        
+        # File 2: Amazon Photos copy with parenthesized timestamp appended
+        f2 = self.registry.add_file(
+            run_id=self.run_id,
+            source_type='amazon_photos',
+            source_root='/Volumes/T9_2T/Amazon Photos',
+            relative_path='IMG_2687 (2018-07-15T05_22_28.426).JPG',
+            filename='IMG_2687 (2018-07-15T05_22_28.426).JPG',
+            file_size=100000,
+            sha256='hash_amazon',
+            exif_date='2018-07-15 05:22:28'
+        )
+
+        self.deduplicator.process_duplicates()
+
+        f1_record = self.registry.get_file(f1)
+        f2_record = self.registry.get_file(f2)
+
+        # macOS Photos has higher priority, so f1 should be canonical, and f2 is the duplicate
+        self.assertEqual(f1_record['is_duplicate'], 0)
+        self.assertEqual(f2_record['is_duplicate'], 1)
+        self.assertEqual(f2_record['best_candidate_id'], f1)
+
 if __name__ == '__main__':
     unittest.main()

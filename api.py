@@ -362,25 +362,64 @@ async def get_report():
         "breakdown": breakdown
     }
 
+# Global copy progress tracking
+copy_progress = {
+    "status": "idle",
+    "copied_count": 0,
+    "total_to_copy": 0,
+    "errors": 0
+}
+
+def run_copy_worker(dest: str, takeout_zips_dir: Optional[str], dry_run: bool):
+    global copy_progress
+    copy_progress["status"] = "running"
+    copy_progress["copied_count"] = 0
+    copy_progress["total_to_copy"] = 0
+    copy_progress["errors"] = 0
+    
+    registry = PhotosRegistry(REGISTRY_DB_PATH)
+    try:
+        centralizer = Centralizer(
+            registry, 
+            dest, 
+            takeout_zips_dir=takeout_zips_dir
+        )
+        
+        def callback(processed, total, errors):
+            copy_progress["copied_count"] = processed
+            copy_progress["total_to_copy"] = total
+            copy_progress["errors"] = errors
+            
+        stats = centralizer.execute(dry_run=dry_run, progress_callback=callback)
+        copy_progress["status"] = "completed"
+    except Exception as e:
+        print(f"Copy background worker failed: {e}")
+        copy_progress["status"] = "failed"
+    finally:
+        registry.close()
+
 @app.post("/execute")
-async def execute_centralization(request: ExecuteRequest):
+async def execute_centralization(request: ExecuteRequest, background_tasks: BackgroundTasks):
     if not os.path.exists(REGISTRY_DB_PATH):
         raise HTTPException(status_code=404, detail="Registry database not found. Scan and dedup first.")
         
-    registry = PhotosRegistry(REGISTRY_DB_PATH)
-    centralizer = Centralizer(
-        registry, 
-        request.dest, 
-        takeout_zips_dir=request.takeout_zips_dir
+    global copy_progress
+    if copy_progress["status"] == "running":
+        return {"status": "running", "message": "Centralization is already in progress."}
+        
+    background_tasks.add_task(
+        run_copy_worker,
+        request.dest,
+        request.takeout_zips_dir,
+        not request.no_dry_run
     )
     
-    stats = centralizer.execute(dry_run=not request.no_dry_run)
-    registry.close()
-    
-    return {
-        "status": "success",
-        "stats": stats
-    }
+    return {"status": "success", "message": "Centralization triggered successfully in background."}
+
+@app.get("/execute/status")
+async def get_execute_status():
+    global copy_progress
+    return copy_progress
 
 if __name__ == "__main__":
     import uvicorn

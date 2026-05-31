@@ -159,6 +159,63 @@ class AmazonPhotosScraper:
 class GoogleTakeoutScraper:
     def __init__(self, takeout_path):
         self.takeout_path = takeout_path
+        self.json_metadata = {}
+        self._pre_index_jsons()
+
+    def _pre_index_jsons(self):
+        """Locates all zip archives and builds a global mapping of lowercase json paths to parsed dicts."""
+        if not os.path.exists(self.takeout_path):
+            return
+
+        zip_files = []
+        if os.path.isdir(self.takeout_path):
+            for file in os.listdir(self.takeout_path):
+                if file.lower().endswith('.zip'):
+                    zip_files.append(os.path.join(self.takeout_path, file))
+        elif self.takeout_path.lower().endswith('.zip'):
+            zip_files.append(self.takeout_path)
+
+        for zip_path in sorted(zip_files):
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    for name in zf.namelist():
+                        if name.endswith('/'):
+                            continue
+                        if name.lower().endswith('.json'):
+                            try:
+                                with zf.open(name) as jf:
+                                    data = json.loads(jf.read().decode('utf-8', errors='ignore'))
+                                    if 'photoTakenTime' in data or 'geoData' in data or 'geoDataExif' in data:
+                                        self.json_metadata[name.lower()] = data
+                            except Exception:
+                                pass
+            except (zipfile.BadZipFile, OSError):
+                continue
+
+    def _get_json_candidates(self, name):
+        """Generates all possible JSON metadata file path candidates for a media file."""
+        dir_name = os.path.dirname(name)
+        base_name = os.path.basename(name)
+        
+        suffixes = ['.json', '.supplemental-metadata.json']
+        candidates = []
+        
+        for ext_orig in [base_name, os.path.splitext(base_name)[0]]:
+            for suffix in suffixes:
+                full_name = ext_orig + suffix
+                if len(full_name) > 51:
+                    truncated_name = full_name[:-5][:46] + '.json'
+                    candidates.append(os.path.join(dir_name, truncated_name))
+                candidates.append(os.path.join(dir_name, full_name))
+                
+        seen = set()
+        result = []
+        for c in candidates:
+            c_low = c.lower()
+            if c_low not in seen:
+                seen.add(c_low)
+                result.append(c_low)
+        return result
 
     def scan_zip_files(self):
         """Locates all zip archives in the Takeout path and parses media/metadata on-the-fly."""
@@ -179,8 +236,6 @@ class GoogleTakeoutScraper:
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zf:
                     namelist = zf.namelist()
-                    # Create a quick set of namelist entries for sidecar lookup speed
-                    name_set = set(namelist)
                     
                     for name in namelist:
                         # Skip directory entries
@@ -193,24 +248,13 @@ class GoogleTakeoutScraper:
                             file_size = info.file_size
                             filename = os.path.basename(name)
                             
-                            # Determine corresponding JSON sidecar
-                            # Google Takeout often creates:
-                            # 1. name + ".json" (e.g. IMG_1234.JPG.json)
-                            # 2. name with extension truncated + ".json" (rare, but happens)
-                            json_candidates = [
-                                name + '.json',
-                                os.path.splitext(name)[0] + '.json'
-                            ]
-                            
+                            # Lookup corresponding JSON metadata from candidates list
                             metadata = {}
-                            for j_cand in json_candidates:
-                                if j_cand in name_set:
-                                    try:
-                                        with zf.open(j_cand) as jf:
-                                            metadata = json.loads(jf.read().decode('utf-8', errors='ignore'))
-                                            break
-                                    except Exception:
-                                        pass
+                            candidates = self._get_json_candidates(name)
+                            for c in candidates:
+                                if c in self.json_metadata:
+                                    metadata = self.json_metadata[c]
+                                    break
 
                             # Parse Takeout JSON metadata fields
                             takeout_json_date = None
@@ -228,14 +272,13 @@ class GoogleTakeoutScraper:
                                 if geo:
                                     latitude = geo.get('latitude')
                                     longitude = geo.get('longitude')
-                                    # Google Takeout defaults zero values or placeholder values
                                     if latitude == 0.0 and longitude == 0.0:
                                         latitude = None
                                         longitude = None
 
                             yield {
                                 'filename': filename,
-                                'source_root': zip_path, # Yield absolute path to support incremental scanning checks
+                                'source_root': zip_path,
                                 'relative_path': name,
                                 'file_size': file_size,
                                 'takeout_json_date': takeout_json_date,
@@ -247,3 +290,4 @@ class GoogleTakeoutScraper:
             except (zipfile.BadZipFile, OSError) as e:
                 print(f"Skipping bad zip file {zip_filename}: {e}")
                 continue
+

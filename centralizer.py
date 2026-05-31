@@ -46,7 +46,7 @@ class Centralizer:
         except OSError:
             return False
 
-    def execute(self, dry_run=True):
+    def execute(self, dry_run=True, progress_callback=None):
         """Iterates through all non-duplicate assets and copies them to the destination."""
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM files WHERE is_duplicate = 0")
@@ -59,7 +59,12 @@ class Centralizer:
             'errors': 0
         }
 
-        for record in records:
+        for idx, record in enumerate(records):
+            # Periodically sleep for 1ms to yield the GIL to the main event loop thread
+            if idx % 50 == 0:
+                import time
+                time.sleep(0.001)
+            
             source_type = record['source_type']
             
             # 1. Resolve source file handle or directory
@@ -80,6 +85,12 @@ class Centralizer:
             
             if not src_abs_path or (not zip_handle and not os.path.exists(src_abs_path)):
                 stats['skipped_count'] += 1
+                if progress_callback:
+                    progress_callback(
+                        stats['copied_count'] + stats['skipped_count'],
+                        len(records),
+                        stats['errors']
+                    )
                 continue
 
             # 2. Determine target path
@@ -87,6 +98,12 @@ class Centralizer:
             
             if dry_run:
                 stats['copied_count'] += 1
+                if progress_callback:
+                    progress_callback(
+                        stats['copied_count'] + stats['skipped_count'],
+                        len(records),
+                        stats['errors']
+                    )
                 continue
 
             # 3. Create target directory
@@ -96,6 +113,12 @@ class Centralizer:
             # Avoid re-copying if the finalized file already exists
             if os.path.exists(target_path) and os.path.getsize(target_path) == record['file_size']:
                 stats['skipped_count'] += 1
+                if progress_callback:
+                    progress_callback(
+                        stats['copied_count'] + stats['skipped_count'],
+                        len(records),
+                        stats['errors']
+                    )
                 continue
 
             temp_path = target_path + '.tmp'
@@ -143,5 +166,12 @@ class Centralizer:
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 stats['errors'] += 1
+
+            if progress_callback:
+                progress_callback(
+                    stats['copied_count'] + stats['skipped_count'],
+                    len(records),
+                    stats['errors']
+                )
 
         return stats

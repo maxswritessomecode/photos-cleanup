@@ -93,7 +93,21 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'success')
-        self.assertEqual(data['stats']['scanned_count'], 1)
+        self.assertIn("message", data)
+        
+        # Verify that get execute status returns running, then completed (since mock runs fast in background)
+        import time
+        for _ in range(10):
+            status_resp = self.client.get("/execute/status")
+            self.assertEqual(status_resp.status_code, 200)
+            status_data = status_resp.json()
+            if status_data['status'] in ('completed', 'failed'):
+                break
+            time.sleep(0.1)
+            
+        self.assertEqual(status_data['status'], 'completed')
+        self.assertEqual(status_data['copied_count'], 1)
+        self.assertEqual(status_data['total_to_copy'], 1)
 
     def test_get_run_status(self):
         # Call GET /run/{run_id}

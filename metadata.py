@@ -2,6 +2,36 @@ import os
 import datetime
 import subprocess
 import shutil
+import ctypes
+import platform
+
+# Define attributes structure for setattrlist on macOS
+if platform.system() == "Darwin":
+    class attrlist(ctypes.Structure):
+        _fields_ = [
+            ("bitmapcount", ctypes.c_uint16),
+            ("reserved", ctypes.c_uint16),
+            ("commonattr", ctypes.c_uint32),
+            ("volattr", ctypes.c_uint32),
+            ("dirattr", ctypes.c_uint32),
+            ("fileattr", ctypes.c_uint32),
+            ("forkattr", ctypes.c_uint32),
+        ]
+
+    class timespec(ctypes.Structure):
+        _fields_ = [
+            ("tv_sec", ctypes.c_long),
+            ("tv_nsec", ctypes.c_long),
+        ]
+
+    ATTR_CMN_CRTIME = 0x00000200
+
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+    except Exception:
+        libc = None
+else:
+    libc = None
 
 def parse_date_string(date_string):
     """Parse date string in standard format 'YYYY-MM-DD HH:MM:SS'."""
@@ -17,7 +47,7 @@ def parse_date_string(date_string):
 def set_file_timestamps(file_path, date_string):
     """
     Sets the filesystem access and modification times (utime) of a file,
-    and calls macOS 'touch -t' to ensure standard Finder Date Created matches.
+    and ensures standard Finder Date Created matches on macOS using native setattrlist.
     """
     dt = parse_date_string(date_string)
     if not dt:
@@ -31,8 +61,25 @@ def set_file_timestamps(file_path, date_string):
         # Set access and modification times
         os.utime(file_path, (epoch_time, epoch_time))
         
-        # On macOS, use touch to force update the filesystem creation and modification date
-        # Force touch to interpret the timestamp in UTC by setting the TZ environment variable
+        # On macOS, try to set the creation time (birthtime) natively in-process
+        if platform.system() == "Darwin" and libc is not None:
+            alist = attrlist()
+            alist.bitmapcount = 5  # ATTR_BIT_MAP_COUNT
+            alist.commonattr = ATTR_CMN_CRTIME
+            
+            time_val = timespec(int(epoch_time), 0)
+            
+            result = libc.setattrlist(
+                file_path.encode('utf-8'),
+                ctypes.byref(alist),
+                ctypes.byref(time_val),
+                ctypes.sizeof(time_val),
+                0
+            )
+            if result == 0:
+                return True
+        
+        # Fallback to touch command if setattrlist fails or is not available
         touch_timestamp = dt.strftime('%Y%m%d%H%M.%S')
         env = os.environ.copy()
         env['TZ'] = 'UTC'

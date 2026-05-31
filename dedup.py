@@ -1,4 +1,6 @@
 import sqlite3
+import re
+
 
 class Deduplicator:
     def __init__(self, registry):
@@ -91,15 +93,18 @@ class Deduplicator:
         candidates = [dict(r) for r in cursor.fetchall()]
 
         # Group in python
+        amazon_date_pattern = re.compile(r'\s*\(\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}\.\d{3}\)')
         groups = {}
         for r in candidates:
             filename = r.get('filename')
             photo_date = r.get('photo_date')
             
             if filename and photo_date:
+                # Strip Amazon Photos appended date patterns for deduplication matching
+                norm_filename = amazon_date_pattern.sub('', filename)
                 # Normalise timestamp by removing any timezone offsets if they exist (standard format check)
                 norm_date = photo_date.split('+')[0].strip()
-                group_key = (filename.lower(), norm_date)
+                group_key = (norm_filename.lower(), norm_date)
                 groups.setdefault(group_key, []).append(r)
 
         # Process each near duplicate group
