@@ -102,6 +102,17 @@ AetherPhotos has a comprehensive test suite covering all scrapers, database oper
 python -m unittest discover tests
 ```
 
+---
+
+## ☕ Support / Buy Me a Coffee
+If AetherPhotos saved you hundreds of gigabytes of disk space, saved you days of manual cleaning, or helped you break free from cloud subscription fees, feel free to buy me a coffee!
+*   **Venmo:** `@myextookallmymoney`
+
+Your support keeps my servers running, my coffee cup full, and is highly appreciated!
+
+---
+
 ## 📄 License
 This project is open-source and free to use under the terms of the [MIT License](LICENSE).
+
 
