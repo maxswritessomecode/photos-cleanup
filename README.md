@@ -1,6 +1,6 @@
 # ⚙️ AetherPhotos Backend Pipeline Engine
 
-This repository contains the core pipeline engine for **AetherPhotos**—a premium, high-performance command-line utility and local FastAPI sidecar API server for de-duplicating and centralizing scattered photos and videos from macOS Photos, Amazon Photos, and Google Takeout archives.
+This repository contains the core pipeline engine for **AetherPhotos**—a premium, high-performance command-line utility and local FastAPI sidecar API server for de-duplicating and centralizing scattered photos and videos from macOS Photos, Amazon Photos, and Google Takeout archives (the official tool Google provides to download all your Google Photos).
 
 This engine runs as the high-speed processing core behind the [AetherPhotos Desktop App](https://github.com/maxswritessomecode/aetherphotos-desktop).
 
@@ -8,7 +8,7 @@ This engine runs as the high-speed processing core behind the [AetherPhotos Desk
 
 ## 🗑️➡️🎒 Stop Kicking the Can Down the Road
 
-If you are like most of us, your digital memories are scattered in a dozen different messy places. You have a couple of old macOS Photos libraries on external drives, random backups uploaded to Amazon Photos, and a massive dump of fragmented, split-ZIP files from Google Takeout that you've been meaning to sort through.
+If you are like most of us, your digital memories are scattered in a dozen different messy places. You have a couple of old macOS Photos libraries on external drives, random backups uploaded to Amazon Photos, and a massive dump of fragmented, split-ZIP files from Google Takeout (which is the official service Google provides to download your entire Google Photos library) that you've been meaning to sort through.
 
 You've probably been **kicking this can down the road for years** because doing it manually is an absolute nightmare. It’s too messy, too time-consuming, and standard cloud tools make it incredibly difficult to decouple from their subscription lock-ins so you can just own and save your pictures the way you want to.
 
