@@ -102,7 +102,6 @@ AetherPhotos has a comprehensive test suite covering all scrapers, database oper
 python -m unittest discover tests
 ```
 
----
+## 📄 License
+This project is open-source and free to use under the terms of the [MIT License](LICENSE).
 
-## 🛡️ License
-Proprietary / Personal Local Archive Utility.
