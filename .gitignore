@@ -1,0 +1,16 @@
+# Virtual environment
+venv/
+
+# Python compiled bytecode
+__pycache__/
+*.pyc
+
+# PyInstaller builds
+build/
+dist/
+*.spec
+
+# Local SQLite databases and temp files
+*.sqlite
+*.db
+temp/
